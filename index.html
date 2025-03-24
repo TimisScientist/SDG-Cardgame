@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>抽圖片遊戲 - 純放大效果版</title>
+    <style>
+        body {
+            font-family: 'Microsoft JhengHei', Arial, sans-serif;
+            text-align: center;
+            margin-top: 30px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        #game-container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        #startBtn {
+            padding: 12px 30px;
+            font-size: 1.2em;
+            cursor: pointer;
+            margin: 20px 0;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        #startBtn:hover {
+            background-color: #2980b9;
+        }
+        #startBtn:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        #statusInfo {
+            margin: 15px 0;
+            font-size: 1.1em;
+            color: #7f8c8d;
+            min-height: 24px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .modal-content {
+            position: relative;
+            margin: auto;
+            display: block;
+            max-width: 85%;
+            max-height: 85%;
+            top: 50%;
+            transform: translateY(-50%) scale(0.7);
+            transition: transform 0.5s ease;
+            border: 3px solid white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.6);
+        }
+        .modal.show {
+            opacity: 1;
+        }
+        .modal.show .modal-content {
+            transform: translateY(-50%) scale(1);
+        }
+        .close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+            text-shadow: 0 0 5px rgba(0,0,0,0.5);
+            transition: color 0.3s;
+        }
+        .close:hover {
+            color: #e74c3c;
+        }
+        .progress-container {
+            width: 80%;
+            height: 20px;
+            background-color: #ecf0f1;
+            border-radius: 10px;
+            margin: 20px auto;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #2ecc71;
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>📷 批量圖片抽獎遊戲</h1>
+        <div id="statusInfo">準備開始遊戲...</div>
+        <div class="progress-container" id="progressContainer" style="display: none;">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <button id="startBtn" disabled>開始抽獎</button>
+        <p id="remainingCount"></p>
+        
+        <div id="imageModal" class="modal">
+            <span class="close">&times;</span>
+            <img id="modalImage" class="modal-content" alt="抽中的圖片">
+        </div>
+    </div>
+
+    <script>
+        // ======================
+        // 核心配置區
+        // ======================
+        const CONFIG = {
+            totalImages: 20,                  // 總圖片數量
+            basePath: 'images/',              // 圖片存放路徑
+            prefix: 'image',                  // 圖片名前綴
+            extension: '.jpg',                // 圖片擴展名
+            startIndex: 1                     // 起始編號
+        };
+        // ======================
+
+        // 遊戲狀態變量
+        let imageConfig = [];
+        let availableIndices = [];
+        let isInitialized = false;
+
+        // DOM元素
+        const startBtn = document.getElementById('startBtn');
+        const statusInfo = document.getElementById('statusInfo');
+        const remainingCount = document.getElementById('remainingCount');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+
+        // 初始化遊戲
+        async function initGame() {
+            try {
+                startBtn.disabled = true;
+                statusInfo.textContent = '正在準備圖片數據...';
+                progressContainer.style.display = 'block';
+                
+                // 生成圖片配置（簡化版，只保留路徑）
+                imageConfig = Array.from({length: CONFIG.totalImages}, (_, i) => {
+                    const num = i + CONFIG.startIndex;
+                    return `${CONFIG.basePath}${CONFIG.prefix}${num}${CONFIG.extension}`;
+                });
+                
+                // 模擬預加載（實際項目中可以移除）
+                await simulatePreload(imageConfig);
+                
+                availableIndices = [...Array(imageConfig.length).keys()];
+                updateRemainingCount();
+                
+                statusInfo.textContent = `已加載 ${imageConfig.length} 張圖片，準備就緒！`;
+                startBtn.disabled = false;
+                isInitialized = true;
+                
+                // 隱藏進度條
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                }, 500);
+            } catch (error) {
+                console.error('初始化失敗:', error);
+                statusInfo.textContent = '初始化失敗: ' + error.message;
+                startBtn.disabled = true;
+            }
+        }
+
+        // 模擬預加載（僅用於演示）
+        function simulatePreload(images) {
+            return new Promise((resolve) => {
+                let loaded = 0;
+                const total = images.length;
+                
+                const interval = setInterval(() => {
+                    loaded += Math.floor(Math.random() * 5) + 1;
+                    if (loaded >= total) {
+                        loaded = total;
+                        clearInterval(interval);
+                        resolve();
+                    }
+                    progressBar.style.width = `${(loaded / total) * 100}%`;
+                    statusInfo.textContent = `正在加載圖片... ${loaded}/${total}`;
+                }, 100);
+            });
+        }
+
+        // 抽圖片功能
+        function drawImage() {
+            if (!isInitialized || availableIndices.length === 0) {
+                if (availableIndices.length === 0) {
+                    // 重置可用圖片
+                    availableIndices = [...Array(imageConfig.length).keys()];
+                    statusInfo.textContent = '所有圖片已重置，可以重新開始抽獎！';
+                    updateRemainingCount();
+                }
+                return;
+            }
+            
+            // 隨機選擇一張圖片
+            const randomIndex = Math.floor(Math.random() * availableIndices.length);
+            const selectedImageIndex = availableIndices[randomIndex];
+            const selectedImage = imageConfig[selectedImageIndex];
+            
+            // 從可用列表中移除
+            availableIndices.splice(randomIndex, 1);
+            updateRemainingCount();
+            
+            // 顯示圖片
+            showModal(selectedImage);
+        }
+
+        // 顯示模態框（簡化版，只顯示圖片）
+        function showModal(imagePath) {
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImage');
+            
+            modalImg.src = imagePath;
+            modalImg.alt = '抽中的圖片';
+            
+            modal.style.display = "block";
+            void modal.offsetWidth; // 強制重繪
+            modal.classList.add('show');
+            
+            // 更新狀態信息
+            statusInfo.textContent = `已抽中第 ${availableIndices.length + 1} 張圖片`;
+        }
+
+        // 更新剩餘圖片計數
+        function updateRemainingCount() {
+            remainingCount.textContent = 
+                `剩餘圖片: ${availableIndices.length}/${imageConfig.length}`;
+            remainingCount.style.color = availableIndices.length < 10 ? '#e74c3c' : '#2c3e50';
+        }
+
+        // 關閉模態框
+        function closeModal() {
+            const modal = document.getElementById('imageModal');
+            modal.classList.remove('show');
+            
+            setTimeout(() => {
+                modal.style.display = "none";
+            }, 300);
+        }
+
+        // 事件監聽
+        startBtn.addEventListener('click', drawImage);
+        document.querySelector('.close').addEventListener('click', closeModal);
+        document.getElementById('imageModal').addEventListener('click', function(event) {
+            if (event.target === this) closeModal();
+        });
+
+        // 頁面加載完成後初始化
+        window.addEventListener('DOMContentLoaded', initGame);
+    </script>
+</body>
+</html>
