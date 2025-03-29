@@ -107,22 +107,16 @@
             width: 0%;
             transition: width 0.3s;
         }
-        .remaining-count {
-            font-size: 1.1em;
-            margin: 10px 0;
-            color: #2c3e50;
-        }
     </style>
 </head>
 <body>
     <div id="game-container">
-        <h1>歡迎！七仙語公平公正抽卡系統</h1>
+        <h1>歡迎！七仙語公平抽卡系統</h1>
         <div id="statusInfo">等陣！唔好咁心急...</div>
         <div class="progress-container" id="progressContainer" style="display: none;">
             <div class="progress-bar" id="progressBar"></div>
         </div>
         <button id="startBtn" disabled>開始抽卡</button>
-        <div class="remaining-count" id="remainingCount"></div>
         
         <div id="imageModal" class="modal">
             <span class="close">&times;</span>
@@ -132,23 +126,38 @@
 
     <script>
         // ======================
-        // 核心配置區 (使用迴圈動態生成 100 張卡牌設定)
+        // 核心配置區
         // ======================
-        const totalCards = 20;
+        const totalCards = 14; // 前14張固定順序的卡牌
+        const extraCards = 50; // 額外的隨機卡牌
         const cards = [];
+        
+        // 前14張卡牌按順序
         for (let i = 1; i <= totalCards; i++) {
-            let weight = 1; // 預設權重為 1
-            if (i === 15) { 
-                // 將第15張卡牌的權重設為較高值，例如 20
+            cards.push({
+                path: `images/image${i}.jpg`,
+                weight: 1,
+                isFixedOrder: true // 標記為固定順序卡牌
+            });
+        }
+        
+        // 額外的隨機卡牌
+        for (let i = totalCards + 1; i <= totalCards + extraCards; i++) {
+            let weight = 1; // 預設權重為1
+            if (i === totalCards + 1) { 
+                // 可以為特定卡牌設置不同權重
                 weight = 30;
             }
             cards.push({
                 path: `images/image${i}.jpg`,
-                weight: weight
+                weight: weight,
+                isFixedOrder: false // 標記為隨機卡牌
             });
         }
+        
         const CONFIG = {
-            cards: cards
+            cards: cards,
+            fixedCardsDrawn: 0 // 記錄已抽出的固定順序卡牌數量
         };
 
         // ======================
@@ -161,7 +170,6 @@
         // DOM元素
         const startBtn = document.getElementById('startBtn');
         const statusInfo = document.getElementById('statusInfo');
-        const remainingCount = document.getElementById('remainingCount');
         const progressContainer = document.getElementById('progressContainer');
         const progressBar = document.getElementById('progressBar');
         const modalImg = document.getElementById('modalImage');
@@ -178,11 +186,11 @@
                 // 初始化卡片池
                 availableCards = JSON.parse(JSON.stringify(CONFIG.cards));
                 drawnCards = [];
+                CONFIG.fixedCardsDrawn = 0;
                 
                 // 預加載所有圖片
                 await preloadImages(CONFIG.cards.map(card => card.path));
                 
-                updateRemainingCount();
                 statusInfo.textContent = '準備就緒！';
                 startBtn.disabled = false;
                 isInitialized = true;
@@ -210,7 +218,7 @@
             }));
         }
 
-        // 加權隨機抽卡
+        // 抽卡函數
         function drawCard() {
             if (!isInitialized) return;
             
@@ -219,29 +227,47 @@
                 return;
             }
 
-            // 計算總權重
-            const totalWeight = availableCards.reduce((sum, card) => sum + card.weight, 0);
-            let random = Math.random() * totalWeight;
-            let selectedIndex = 0;
-
-            // 根據權重選擇卡片
-            for (let i = 0; i < availableCards.length; i++) {
-                if (random <= availableCards[i].weight) {
-                    selectedIndex = i;
-                    break;
+            let selectedCard;
+            
+            // 如果還有固定順序的卡牌未抽出，按順序抽出
+            if (CONFIG.fixedCardsDrawn < totalCards) {
+                // 找出下一個固定順序的卡牌
+                const nextFixedCardIndex = availableCards.findIndex(card => 
+                    card.isFixedOrder && parseInt(card.path.match(/image(\d+)\.jpg/)[1]) === CONFIG.fixedCardsDrawn + 1
+                );
+                
+                if (nextFixedCardIndex !== -1) {
+                    selectedCard = availableCards.splice(nextFixedCardIndex, 1)[0];
+                    CONFIG.fixedCardsDrawn++;
                 }
-                random -= availableCards[i].weight;
             }
+            
+            // 如果沒有固定順序的卡牌需要抽出，則隨機抽取
+            if (!selectedCard) {
+                // 計算總權重
+                const totalWeight = availableCards.reduce((sum, card) => sum + card.weight, 0);
+                let random = Math.random() * totalWeight;
+                let selectedIndex = 0;
 
-            // 取得並移除已選卡片
-            const selectedCard = availableCards.splice(selectedIndex, 1)[0];
+                // 根據權重選擇卡片
+                for (let i = 0; i < availableCards.length; i++) {
+                    if (random <= availableCards[i].weight) {
+                        selectedIndex = i;
+                        break;
+                    }
+                    random -= availableCards[i].weight;
+                }
+
+                // 取得並移除已選卡片
+                selectedCard = availableCards.splice(selectedIndex, 1)[0];
+            }
+            
             drawnCards.push(selectedCard);
             
             console.log('顯示圖片:', selectedCard.path);
             showModal(selectedCard.path);
             
-            updateRemainingCount();
-            statusInfo.textContent = `已抽中 ${drawnCards.length}/${CONFIG.cards.length} 張卡片`;
+            statusInfo.textContent = `已抽中 ${drawnCards.length} 張卡片`;
         }
 
         // 顯示模態框函數
@@ -265,11 +291,6 @@
                 void modal.offsetWidth;
                 modal.classList.add('show');
             }, 10);
-        }
-
-        // 更新剩餘卡牌數量
-        function updateRemainingCount() {
-            remainingCount.textContent = `剩餘卡片: ${availableCards.length}`;
         }
 
         // 關閉模態框
